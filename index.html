@@ -117,9 +117,24 @@
         <div class="modal-content">
             <h3>Ajouter une opération</h3>
             <form id="transaction-form">
-                <div class="form-group"><label>Type</label><select id="t-type"><option value="depense">Dépense</option><option value="revenu">Revenu</option></select></div>
+                <div class="form-group"><label>Type</label><select id="t-type"><option value="depense">Dépense</option><option value="revenu">Revenu</option><option value="revenu">épargne</option></select></div>
                 <div class="form-group"><label>Montant (CFA)</label><input type="number" id="t-amount" required></div>
-                <div class="form-group"><label>Catégorie</label><select id="t-category"><option value="Nourriture">Nourriture</option><option value="Transport">Transport</option><option value="Loisirs">Loisirs</option><option value="Salaire">Salaire</option><option value="Autre">Autre</option></select></div>
+                <div class="form-group">
+  <label>Catégorie</label>
+  <select id="t-category">
+    <option value="Ventes">Ventes</option>
+    <option value="Services">Services</option>
+    <option value="Achats">Achats</option>
+    <option value="Salaires">Salaires</option>
+    <option value="Loyer">Loyer</option>
+    <option value="Factures">Factures</option>
+    <option value="Transport">Transport</option>
+    <option value="Marketing">Marketing</option>
+    <option value="Équipement">Équipement</option>
+      <option value="Équipement">Épargnet</option>
+    <option value="Divers">Divers</option>
+  </select>
+</div>
                 <div class="form-group"><label>Description</label><input type="text" id="t-desc" required></div>
                 <button type="submit" class="btn-submit">Valider</button>
                 <button type="button" onclick="document.getElementById('add-modal').style.display='none'" style="width:100%; background:none; border:none; margin-top:10px; color:var(--text-muted);">Annuler</button>
