@@ -3,103 +3,381 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CLYD Manager</title>
+    <title>CLYD Manager Pro</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Styles spécifiques pour l'écran de connexion */
+        .login-container {
+            display: none; /* Caché par défaut, géré par JS */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            background-color: var(--bg-color);
+        }
+        .login-logo { width: 80px; height: 80px; margin-bottom: 20px; border-radius: 16px; }
+        .login-container h2 { margin-bottom: 8px; color: var(--text-main); }
+        .login-container p { color: var(--text-muted); margin-bottom: 30px; font-size: 14px; text-align: center; }
+        .login-form { width: 100%; max-width: 320px; }
+        .error-msg { color: var(--danger); font-size: 13px; margin-bottom: 10px; text-align: center; display: none; }
+        
+        /* Cacher l'app tant que non connecté */
+        #app-view { display: none; }
+    </style>
 </head>
 <body>
 
-    <header class="app-header">
-        <div class="logo-container">
-            <!-- Remplacez 'logo.png' par le nom exact de votre fichier image -->
-            <img src="logo.png" alt="CLYD Logo" class="logo-img">
-            <div>
-                <p style="font-size:10px; color:var(--text-muted); font-weight:600;">ENTREPRISE</p>
-                <h1>CLYD</h1>
+    <!-- ÉCRAN DE CONNEXION (Seul moyen d'entrer) -->
+    <div id="login-view" class="login-container">
+        <img src="icon-512.png" alt="CLYD Logo" class="login-logo">
+        <h2>CLYD Manager</h2>
+        <p>Accès réservé au personnel autorisé.<br>Veuillez vous identifier.</p>
+        <form id="login-form" class="login-form">
+            <div class="form-group">
+                <input type="email" id="login-email" placeholder="Adresse email" required style="text-align: center;">
+            </div>
+            <div class="form-group">
+                <input type="password" id="login-password" placeholder="Mot de passe" required style="text-align: center;">
+            </div>
+            <p id="login-error" class="error-msg"></p>
+            <button type="submit" class="btn-submit">Se connecter</button>
+        </form>
+    </div>
+
+    <!-- APPLICATION PRINCIPALE (Cachée si non connecté) -->
+    <div id="app-view">
+        <header class="app-header">
+            <div class="logo-container">
+                <img src="logo.png" alt="CLYD" class="logo-img">
+                <div>
+                    <p style="font-size:10px; color:var(--text-muted); font-weight:600;">ENTREPRISE</p>
+                    <h1>CLYD</h1>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span id="user-display" style="font-size: 12px; font-weight: 600; color: var(--text-main);"></span>
+                <div class="user-switcher" onclick="logout()" title="Se déconnecter">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </div>
+            </div>
+        </header>
+
+        <div id="page-home" class="app-page active">
+            <div class="hero-card">
+                <p>Valeur Nette de l'Entreprise</p>
+                <h2 id="net-worth">0 CFA</h2>
+            </div>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <h4>Revenus (Total)</h4>
+                    <div class="value" id="total-revenue" style="color: var(--success);">0 CFA</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Dépenses (Total)</h4>
+                    <div class="value" id="total-expense" style="color: var(--danger);">0 CFA</div>
+                </div>
+            </div>
+            <h3 style="font-size: 16px; margin-bottom: 12px;">Activités en temps réel</h3>
+            <div id="recent-activities"></div>
+        </div>
+
+        <div id="page-products" class="app-page">
+            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Produits & Stock</h3>
+            <div id="products-list"></div>
+        </div>
+
+        <div id="page-debts" class="app-page">
+            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Gestion des Dettes</h3>
+            <div id="debts-list"></div>
+        </div>
+
+        <div id="page-assets" class="app-page">
+            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Biens & Actifs</h3>
+            <div class="stat-card" style="margin-bottom:15px; border-left-color: var(--accent-black);">
+                <h4>Valeur Totale des Actifs</h4>
+                <div class="value" id="total-assets-value">0 CFA</div>
+            </div>
+            <div id="assets-list"></div>
+        </div>
+
+        <button class="fab" onclick="openModal()"><i class="fa-solid fa-plus"></i></button>
+
+        <div id="add-modal" class="modal">
+            <div class="modal-content">
+                <h3 style="margin-bottom:20px;">Nouvelle entrée</h3>
+                <form id="dynamic-form" onsubmit="handleFormSubmit(event)">
+                    <div class="form-group">
+                        <label>Type d'ajout</label>
+                        <select id="add-type" onchange="updateFormFields()">
+                            <option value="transaction">Transaction (Revenu/Dépense)</option>
+                            <option value="product">Nouveau Produit</option>
+                            <option value="debt">Nouvelle Dette</option>
+                            <option value="asset">Nouvel Actif / Bien</option>
+                        </select>
+                    </div>
+                    <div id="dynamic-fields"></div>
+                    <button type="submit" class="btn-submit">Enregistrer dans le Cloud</button>
+                </form>
+                <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
             </div>
         </div>
-        <div class="user-switcher" onclick="cycleUser()">
-            <i class="fa-solid fa-user-circle"></i>
-            <span id="current-user-name">Chargement...</span>
-            <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
-        </div>
-    </header>
 
-    <!-- PAGE: ACCUEIL -->
-    <div id="page-home" class="app-page active">
-        <div class="hero-card">
-            <p>Valeur Nette de l'Entreprise</p>
-            <h2 id="net-worth">0 CFA</h2>
-        </div>
-
-        <div class="stat-grid">
-            <div class="stat-card">
-                <h4>Revenus (Mois)</h4>
-                <div class="value" id="total-revenue" style="color: var(--success);">0 CFA</div>
-            </div>
-            <div class="stat-card">
-                <h4>Dépenses (Mois)</h4>
-                <div class="value" id="total-expense" style="color: var(--danger);">0 CFA</div>
-            </div>
-        </div>
-
-        <h3 style="font-size: 16px; margin-bottom: 12px;">Dernières Activités</h3>
-        <div id="recent-activities"></div>
+        <nav class="bottom-nav">
+            <div class="nav-item active" onclick="navigate('home', this)"><i class="fa-solid fa-house"></i><span>Accueil</span></div>
+            <div class="nav-item" onclick="navigate('products', this)"><i class="fa-solid fa-box"></i><span>Stock</span></div>
+            <div class="nav-item" onclick="navigate('debts', this)"><i class="fa-solid fa-hand-holding-dollar"></i><span>Dettes</span></div>
+            <div class="nav-item" onclick="navigate('assets', this)"><i class="fa-solid fa-building"></i><span>Actifs</span></div>
+        </nav>
     </div>
 
-    <!-- PAGE: PRODUITS -->
-    <div id="page-products" class="app-page">
-        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Produits & Stock</h3>
-        <div id="products-list"></div>
-    </div>
+    <!-- SCRIPT FIREBASE ET LOGIQUE APP -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
 
-    <!-- PAGE: DETTES -->
-    <div id="page-debts" class="app-page">
-        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Gestion des Dettes</h3>
-        <div id="debts-list"></div>
-    </div>
+        // 1. VOTRE CONFIGURATION FIREBASE EXACTE
+        const firebaseConfig = {
+            apiKey: "AIzaSyAl4kdGud45pEoI84_A7iRM4ob0fqECkCU",
+            authDomain: "clyd-gestion.firebaseapp.com",
+            projectId: "clyd-gestion",
+            storageBucket: "clyd-gestion.firebasestorage.app",
+            messagingSenderId: "93789571547",
+            appId: "1:93789571547:web:a016be3c7e9eb5ee75fffe",
+            measurementId: "G-1XKHVRJZ2C"
+        };
 
-    <!-- PAGE: ACTIFS -->
-    <div id="page-assets" class="app-page">
-        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Biens & Actifs</h3>
-        <div class="stat-card" style="margin-bottom:15px; border-left-color: var(--accent-black);">
-            <h4>Valeur Totale des Actifs</h4>
-            <div class="value" id="total-assets-value">0 CFA</div>
-        </div>
-        <div id="assets-list"></div>
-    </div>
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
-    <!-- BOUTON FLOTTANT -->
-    <button class="fab" onclick="openModal()"><i class="fa-solid fa-plus"></i></button>
+        let currentUserId = null;
+        let appData = { transactions: [], products: [], debts: [], assets: [] };
 
-    <!-- MODAL D'AJOUT -->
-    <div id="add-modal" class="modal">
-        <div class="modal-content">
-            <h3 style="margin-bottom:20px;">Nouvelle entrée</h3>
-            <form id="dynamic-form" onsubmit="handleFormSubmit(event)">
-                <!-- Champs injectés par JS -->
-            </form>
-            <button type="button" class="btn-cancel" onclick="closeModal()">Annuler</button>
-        </div>
-    </div>
+        // 2. GESTION DE L'AUTHENTIFICATION
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // Utilisateur connecté
+                currentUserId = user.uid;
+                document.getElementById('login-view').style.display = 'none';
+                document.getElementById('app-view').style.display = 'block';
+                document.getElementById('user-display').textContent = user.email.split('@')[0]; // Affiche le nom avant le @
+                initApp(); // Démarrer l'écoute de la base de données
+            } else {
+                // Utilisateur déconnecté
+                currentUserId = null;
+                document.getElementById('login-view').style.display = 'flex';
+                document.getElementById('app-view').style.display = 'none';
+            }
+        });
 
-    <!-- NAVIGATION -->
-    <nav class="bottom-nav">
-        <div class="nav-item active" onclick="navigate('home', this)"><i class="fa-solid fa-house"></i><span>Accueil</span></div>
-        <div class="nav-item" onclick="navigate('products', this)"><i class="fa-solid fa-box"></i><span>Stock</span></div>
-        <div class="nav-item" onclick="navigate('debts', this)"><i class="fa-solid fa-hand-holding-dollar"></i><span>Dettes</span></div>
-        <div class="nav-item" onclick="navigate('assets', this)"><i class="fa-solid fa-building"></i><span>Actifs</span></div>
-    </nav>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const errorMsg = document.getElementById('login-error');
 
-    <script src="app.js"></script>
-    <script>
-        // Enregistrement du Service Worker pour la PWA
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js')
-                .then(reg => console.log('SW enregistré', reg))
-                .catch(err => console.log('Erreur SW', err));
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                errorMsg.style.display = 'none';
+            } catch (error) {
+                errorMsg.textContent = "Email ou mot de passe incorrect.";
+                errorMsg.style.display = 'block';
+            }
+        });
+
+        window.logout = () => signOut(auth);
+
+        // 3. LOGIQUE DE L'APPLICATION (Temps réel)
+        function initApp() {
+            onSnapshot(collection(db, "transactions"), (snap) => {
+                appData.transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                updateUI();
+            });
+            onSnapshot(collection(db, "products"), (snap) => {
+                appData.products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                updateUI();
+            });
+            onSnapshot(collection(db, "debts"), (snap) => {
+                appData.debts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                updateUI();
+            });
+            onSnapshot(collection(db, "assets"), (snap) => {
+                appData.assets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                updateUI();
+            });
         }
+
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('fr-FR').format(amount || 0) + ' CFA';
+        }
+
+        function updateUI() {
+            const revenue = appData.transactions.filter(t => t.type === 'revenu').reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+            const expense = appData.transactions.filter(t => t.type === 'depense').reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+            const assetsValue = appData.assets.reduce((sum, a) => sum + (parseFloat(a.value) || 0), 0);
+            
+            document.getElementById('net-worth').textContent = formatMoney((revenue - expense) + assetsValue);
+            document.getElementById('total-revenue').textContent = formatMoney(revenue);
+            document.getElementById('total-expense').textContent = formatMoney(expense);
+            document.getElementById('total-assets-value').textContent = formatMoney(assetsValue);
+
+            renderLists();
+        }
+
+        function renderLists() {
+            // Activités
+            const recent = [...appData.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+            document.getElementById('recent-activities').innerHTML = recent.map(t => `
+                <div class="list-item">
+                    <div class="item-left">
+                        <div class="item-icon" style="color:${t.type === 'revenu' ? 'var(--success)' : 'var(--danger)'}">
+                            <i class="fa-solid ${t.type === 'revenu' ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
+                        </div>
+                        <div class="item-info">
+                            <h4>${t.description}</h4>
+                            <p>${new Date(t.date).toLocaleDateString()}</p>
+                        </div>
+                    </div>
+                    <div class="item-right">
+                        <div class="amount" style="color:${t.type === 'revenu' ? 'var(--success)' : 'var(--danger)'}">
+                            ${t.type === 'revenu' ? '+' : '-'} ${formatMoney(t.amount)}
+                        </div>
+                    </div>
+                </div>
+            `).join('') || '<p style="text-align:center; color:var(--text-muted); padding:20px;">Aucune activité.</p>';
+
+            // Produits
+            document.getElementById('products-list').innerHTML = appData.products.map(p => `
+                <div class="list-item">
+                    <div class="item-left">
+                        <div class="item-icon"><i class="fa-solid fa-box"></i></div>
+                        <div class="item-info"><h4>${p.name}</h4><p>Stock: ${p.stock} | Vente: ${formatMoney(p.sellPrice)}</p></div>
+                    </div>
+                    <div class="item-right">
+                        <i class="fa-solid fa-trash" style="color:var(--danger); cursor:pointer;" onclick="window.deleteItem('products', '${p.id}')"></i>
+                    </div>
+                </div>
+            `).join('') || '<p style="text-align:center; color:var(--text-muted); padding:20px;">Aucun produit.</p>';
+
+            // Dettes
+            document.getElementById('debts-list').innerHTML = appData.debts.map(d => `
+                <div class="list-item">
+                    <div class="item-left">
+                        <div class="item-icon" style="color:${d.type === 'active' ? 'var(--success)' : 'var(--danger)'}">
+                            <i class="fa-solid ${d.type === 'active' ? 'fa-hand-holding-dollar' : 'fa-file-invoice-dollar'}"></i>
+                        </div>
+                        <div class="item-info">
+                            <h4>${d.person}</h4>
+                            <p>${d.type === 'active' ? 'On nous doit' : 'Nous devons'} • ${formatMoney(d.amount)}</p>
+                        </div>
+                    </div>
+                    <div class="item-right">
+                        ${d.status === 'pending' ? `<i class="fa-solid fa-check" style="color:var(--success); margin-right:10px; cursor:pointer;" onclick="window.markDebtPaid('${d.id}')"></i>` : '<span style="font-size:10px;">Réglée</span>'}
+                        <i class="fa-solid fa-trash" style="color:var(--danger); cursor:pointer;" onclick="window.deleteItem('debts', '${d.id}')"></i>
+                    </div>
+                </div>
+            `).join('') || '<p style="text-align:center; color:var(--text-muted); padding:20px;">Aucune dette.</p>';
+
+            // Actifs
+            document.getElementById('assets-list').innerHTML = appData.assets.map(a => `
+                <div class="list-item">
+                    <div class="item-left">
+                        <div class="item-icon"><i class="fa-solid fa-building"></i></div>
+                        <div class="item-info"><h4>${a.name}</h4><p>${a.category} • ${formatMoney(a.value)}</p></div>
+                    </div>
+                    <div class="item-right">
+                        <i class="fa-solid fa-trash" style="color:var(--danger); cursor:pointer;" onclick="window.deleteItem('assets', '${a.id}')"></i>
+                    </div>
+                </div>
+            `).join('') || '<p style="text-align:center; color:var(--text-muted); padding:20px;">Aucun actif.</p>';
+        }
+
+        // 4. ACTIONS BASE DE DONNÉES
+        window.deleteItem = async (col, id) => {
+            if (confirm('Supprimer définitivement ?')) await deleteDoc(doc(db, col, id));
+        };
+
+        window.markDebtPaid = async (id) => {
+            const debt = appData.debts.find(d => d.id === id);
+            if (debt) {
+                await updateDoc(doc(db, "debts", id), { status: 'paid' });
+                if (debt.type === 'active') {
+                    await addDoc(collection(db, "transactions"), {
+                        type: 'revenu', amount: debt.amount, description: `Règlement dette: ${debt.person}`,
+                        createdBy: currentUserId, date: new Date().toISOString()
+                    });
+                }
+            }
+        };
+
+        // 5. FORMULAIRES
+        window.openModal = () => {
+            document.getElementById('add-modal').classList.add('active');
+            document.getElementById('dynamic-fields').innerHTML = `
+                <div class="form-group"><label>Type</label><select name="t_type"><option value="revenu">Revenu</option><option value="depense">Dépense</option></select></div>
+                <div class="form-group"><label>Montant (CFA)</label><input type="number" name="amount" required></div>
+                <div class="form-group"><label>Description</label><input type="text" name="description" required></div>
+            `; // Simplifié pour l'exemple, vous pouvez remettre la logique complète des 4 types ici
+        };
+        window.closeModal = () => document.getElementById('add-modal').classList.remove('active');
+        
+        // Fonction pour changer les champs du formulaire selon le type (à compléter si besoin)
+        window.updateFormFields = () => {
+            const type = document.getElementById('add-type').value;
+            const container = document.getElementById('dynamic-fields');
+            if(type === 'transaction') {
+                container.innerHTML = `<div class="form-group"><label>Type</label><select name="t_type"><option value="revenu">Revenu</option><option value="depense">Dépense</option></select></div>
+                <div class="form-group"><label>Montant (CFA)</label><input type="number" name="amount" required></div>
+                <div class="form-group"><label>Description</label><input type="text" name="description" required></div>`;
+            } else if (type === 'product') {
+                container.innerHTML = `<div class="form-group"><label>Nom</label><input type="text" name="name" required></div>
+                <div class="form-group"><label>Prix vente (CFA)</label><input type="number" name="sellPrice" required></div>
+                <div class="form-group"><label>Stock</label><input type="number" name="stock" required></div>`;
+            } else if (type === 'debt') {
+                container.innerHTML = `<div class="form-group"><label>Type</label><select name="d_type"><option value="active">On nous doit</option><option value="passive">Nous devons</option></select></div>
+                <div class="form-group"><label>Personne</label><input type="text" name="person" required></div>
+                <div class="form-group"><label>Montant (CFA)</label><input type="number" name="amount" required></div>`;
+            } else {
+                container.innerHTML = `<div class="form-group"><label>Nom du bien</label><input type="text" name="name" required></div>
+                <div class="form-group"><label>Catégorie</label><select name="category"><option>Véhicule</option><option>Équipement</option><option>Autre</option></select></div>
+                <div class="form-group"><label>Valeur (CFA)</label><input type="number" name="value" required></div>`;
+            }
+        };
+
+        window.handleFormSubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const type = document.getElementById('add-type').value;
+            const payload = { createdBy: currentUserId, date: new Date().toISOString() };
+
+            if (type === 'transaction') {
+                payload.type = formData.get('t_type'); payload.amount = parseFloat(formData.get('amount')); payload.description = formData.get('description');
+                await addDoc(collection(db, "transactions"), payload);
+            } else if (type === 'product') {
+                payload.name = formData.get('name'); payload.sellPrice = parseFloat(formData.get('sellPrice')); payload.stock = parseInt(formData.get('stock'));
+                await addDoc(collection(db, "products"), payload);
+            } else if (type === 'debt') {
+                payload.type = formData.get('d_type'); payload.person = formData.get('person'); payload.amount = parseFloat(formData.get('amount')); payload.status = 'pending';
+                await addDoc(collection(db, "debts"), payload);
+            } else if (type === 'asset') {
+                payload.name = formData.get('name'); payload.category = formData.get('category'); payload.value = parseFloat(formData.get('value'));
+                await addDoc(collection(db, "assets"), payload);
+            }
+            window.closeModal();
+        };
+
+        window.navigate = (pageId, el) => {
+            document.querySelectorAll('.app-page').forEach(p => p.classList.remove('active'));
+            document.getElementById(`page-${pageId}`).classList.add('active');
+            if (el) {
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                el.classList.add('active');
+            }
+        };
     </script>
 </body>
 </html>
