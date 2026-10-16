@@ -88,6 +88,7 @@
             justify-content: center;
             min-height: 100vh;
             min-height: -webkit-fill-available;
+            min-height: 100dvh;
             padding: 20px;
             padding-top: calc(20px + env(safe-area-inset-top));
             padding-bottom: calc(20px + env(safe-area-inset-bottom));
@@ -200,6 +201,25 @@
             box-shadow: var(--shadow-lg);
         }
 
+        /* Animation douce et progressive de la connexion */
+        @keyframes loginReveal {
+            from { opacity: 0; transform: translateY(22px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes loginGlow {
+            0%, 100% { box-shadow: 0 8px 32px rgba(255,255,255,0.10); }
+            50% { box-shadow: 0 8px 42px rgba(255,255,255,0.24); }
+        }
+        .login-container .login-logo { animation: loginReveal .7s ease-out both, loginGlow 3s ease-in-out .7s infinite; }
+        .login-container h2 { animation: loginReveal .7s ease-out .12s both; }
+        .login-container > p { animation: loginReveal .7s ease-out .22s both; }
+        .login-container .login-form { animation: loginReveal .75s ease-out .34s both; }
+        .login-btn:active { transform: scale(.98); }
+        @media (prefers-reduced-motion: reduce) {
+            .login-container .login-logo, .login-container h2,
+            .login-container > p, .login-container .login-form { animation: none; }
+        }
+
         /* APPLICATION PRINCIPALE */
         #app-view { display: none; }
 
@@ -275,7 +295,7 @@
         .app-page { 
             display: none; 
             padding: 20px; 
-            padding-bottom: 60px;
+            padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px));
             animation: fadeIn 0.4s ease-out;
         }
         .app-page.active { display: block; }
@@ -510,7 +530,7 @@
         /* FAB - JUSTE AU-DESSUS DE LA NAV */
         .fab { 
             position: fixed;
-            bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+            bottom: calc(88px + env(safe-area-inset-bottom, 0px));
             right: 20px;
             width: 60px;
             height: 60px;
@@ -636,7 +656,8 @@
             background: var(--gradient-dark);
             display: flex;
             justify-content: space-around;
-            padding: 12px 0 24px;
+            padding: 10px 8px calc(10px + env(safe-area-inset-bottom, 0px));
+            min-height: calc(68px + env(safe-area-inset-bottom, 0px));
             box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
             z-index: 90;
             border-top: 1px solid rgba(255,255,255,0.1);
@@ -653,7 +674,9 @@
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s;
-            padding: 8px 12px;
+            padding: 8px 4px;
+            flex: 1;
+            min-width: 0;
             border-radius: 12px;
         }
 
