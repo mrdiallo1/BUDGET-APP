@@ -4,16 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>CLYD Manager Pro</title>
-    
+
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    
+
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="CLYD Manager">
     <link rel="apple-touch-icon" href="icon-512.png">
-    
+
     <style>
         :root {
             --bg-primary: #0A0A0A;
@@ -37,13 +37,13 @@
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-        
+
         html, body {
             overflow-x: hidden;
             width: 100%;
             height: 100%;
         }
-        
+
         body { 
             background: var(--bg-primary); 
             color: var(--text-primary); 
@@ -834,8 +834,29 @@
             <div id="assets-list"></div>
         </div>
 
-        <div style="padding:0 20px 115px;text-align:center">
-            <button type="button" onclick="openResetModal()" style="border:1px solid #ef4444;background:transparent;color:#ef4444;border-radius:12px;padding:12px;font-weight:700;width:100%">Réinitialiser toutes les données</button>
+        <!-- PAGE PROFIL : compte connecté, historique partagé et réinitialisation -->
+        <div id="page-profile" class="app-page">
+            <div class="section-title"><span>Mon profil</span></div>
+            <div class="list-item" style="display:block;padding:20px">
+                <div style="display:flex;align-items:center;gap:14px">
+                    <div class="item-icon default" style="width:52px;height:52px;font-size:22px"><i class="fa-solid fa-user"></i></div>
+                    <div class="item-info">
+                        <h4 id="profile-email">Compte connecté</h4>
+                        <p>Utilisateur CLYD Manager Pro</p>
+                    </div>
+                </div>
+            </div>
+            <div class="section-title" style="margin-top:24px">
+                <span>Historique partagé</span>
+                <span class="badge" id="audit-count">0</span>
+            </div>
+            <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px">Historique des actions enregistrées par tous les utilisateurs de l’application.</p>
+            <div id="shared-activity-list"></div>
+            <div style="margin:28px 0 24px;padding:16px;border:1px solid #fecaca;background:#fff7f7;border-radius:16px">
+                <h3 style="color:#dc2626;margin-bottom:8px;font-size:16px"><i class="fa-solid fa-triangle-exclamation"></i> Zone dangereuse</h3>
+                <p style="font-size:13px;color:#7f1d1d;line-height:1.5;margin-bottom:14px">La réinitialisation supprime les données communes de l’entreprise : ventes, transactions, produits, dettes, actifs et historique partagé. Les comptes de connexion ne sont pas supprimés. Cette action est irréversible.</p>
+                <button type="button" onclick="openResetModal()" style="border:1px solid #dc2626;background:#dc2626;color:white;border-radius:12px;padding:13px;font-weight:700;width:100%"><i class="fa-solid fa-trash-can"></i> Réinitialiser toutes les données</button>
+            </div>
         </div>
         <button class="fab" onclick="openModal()"><i class="fa-solid fa-plus"></i></button>
 
@@ -892,6 +913,10 @@
                 <i class="fa-solid fa-building"></i>
                 <span>Actifs</span>
             </div>
+            <div class="nav-item" onclick="navigate('profile', this)">
+                <i class="fa-solid fa-user"></i>
+                <span>Profil</span>
+            </div>
         </nav>
     </div>
 
@@ -915,7 +940,7 @@
         const db = getFirestore(app);
 
         let currentUserId = null;
-        let appData = { transactions: [], products: [], debts: [], assets: [], sales: [] };
+        let appData = { transactions: [], products: [], debts: [], assets: [], sales: [], activity_logs: [] };
         let revenueChart = null;
 
         onAuthStateChanged(auth, (user) => {
@@ -924,6 +949,7 @@
                 document.getElementById('login-view').style.display = 'none';
                 document.getElementById('app-view').style.display = 'block';
                 document.getElementById('user-display').textContent = user.email.split('@')[0];
+                document.getElementById('profile-email').textContent = user.email || 'Compte connecté';
                 initApp();
             } else {
                 currentUserId = null;
@@ -970,6 +996,49 @@
                 appData.assets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 updateUI();
             });
+            onSnapshot(collection(db, "activity_logs"), (snap) => {
+                appData.activity_logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderSharedActivity();
+            }, (error) => {
+                const container = document.getElementById('shared-activity-list');
+                if (container) container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-lock"></i><p>Impossible de charger l’historique. Vérifiez les règles Firestore de activity_logs.</p></div>';
+                console.error('Historique partagé inaccessible :', error);
+            });
+        }
+
+        async function logActivity(action, details) {
+            if (!auth.currentUser) return;
+            try {
+                await addDoc(collection(db, 'activity_logs'), {
+                    action: String(action || 'Action'),
+                    details: String(details || ''),
+                    actorUid: auth.currentUser.uid,
+                    actorEmail: auth.currentUser.email || 'Utilisateur inconnu',
+                    createdAt: new Date().toISOString()
+                });
+            } catch (error) {
+                console.error('Impossible d’enregistrer l’activité :', error);
+            }
+        }
+
+        function renderSharedActivity() {
+            const container = document.getElementById('shared-activity-list');
+            const count = document.getElementById('audit-count');
+            if (!container || !count) return;
+            const rows = [...appData.activity_logs].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+            count.textContent = rows.length;
+            container.innerHTML = rows.length ? rows.map((item, index) => `
+                <div class="list-item" style="animation-delay:${Math.min(index, 10) * 0.03}s">
+                    <div class="item-left">
+                        <div class="item-icon default"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                        <div class="item-info">
+                            <h4>${escapeHtml(item.action || 'Action')}</h4>
+                            <p>${escapeHtml(item.details || '')}</p>
+                            <p style="font-size:11px;color:var(--text-muted)">${escapeHtml(item.actorEmail || 'Utilisateur')} · ${item.createdAt ? new Date(item.createdAt).toLocaleString('fr-FR') : 'Date inconnue'}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('') : '<div class="empty-state"><i class="fa-solid fa-clock-rotate-left"></i><p>Aucune activité enregistrée pour le moment.</p></div>';
         }
 
         function formatMoney(amount) {
@@ -982,7 +1051,7 @@
             const assetsValue = appData.assets.reduce((sum, a) => sum + (parseFloat(a.value) || 0), 0);
             const debtActive = appData.debts.filter(d => d.type === 'active' && d.status === 'pending').reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
             const debtPassive = appData.debts.filter(d => d.type === 'passive' && d.status === 'pending').reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
-            
+
             const netWorth = (revenue - expense) + assetsValue + debtActive - debtPassive;
 
             document.getElementById('net-worth').textContent = formatMoney(netWorth);
@@ -1043,7 +1112,7 @@
         function renderLists() {
             const recent = [...appData.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
             document.getElementById('activity-count').textContent = appData.transactions.length;
-            
+
             document.getElementById('recent-activities').innerHTML = recent.length === 0 
                 ? '<div class="empty-state"><i class="fa-solid fa-inbox"></i><p>Aucune activité</p></div>'
                 : recent.map((t, i) => `
@@ -1151,7 +1220,12 @@
         const productOptions = () => appData.products.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (stock : ${Number(p.stock)||0})</option>`).join('');
         window.deleteItem = async (col, id) => {
             if (confirm('Supprimer définitivement ?')) {
-                await deleteDoc(doc(db, col, id));
+                try {
+                    const item = (appData[col] || []).find(entry => entry.id === id);
+                    const label = item?.name || item?.person || item?.description || item?.productName || id;
+                    await deleteDoc(doc(db, col, id));
+                    await logActivity('Suppression', `${col} : ${label}`);
+                } catch (error) { alert('Suppression impossible : ' + error.message); }
             }
         };
 
@@ -1168,6 +1242,7 @@
                         amount: debt.amount, description: `Règlement dette: ${debt.person}`,
                         debtId: id, createdBy: currentUserId, date: new Date().toISOString() });
                 });
+                await logActivity('Dette réglée', `Règlement de la dette de ${appData.debts.find(d => d.id === id)?.person || id}`);
             } catch(e) { alert(e.message); }
         };
 
@@ -1185,8 +1260,8 @@
             try {
                 const credential = EmailAuthProvider.credential(auth.currentUser.email, document.getElementById('reset-password').value);
                 await reauthenticateWithCredential(auth.currentUser, credential);
-                // Les règles Firestore doivent limiter la suppression à un administrateur autorisé.
-                for (const name of ['sales', 'transactions', 'products', 'debts', 'assets']) {
+                // Tous les comptes autorisés par les règles Firestore peuvent déclencher cette suppression globale. Pour une sécurité réelle, le contrôle doit aussi être appliqué côté serveur.
+                for (const name of ['sales', 'transactions', 'products', 'debts', 'assets', 'activity_logs']) {
                     let snap = await getDocs(collection(db, name));
                     while (!snap.empty) {
                         const batch = writeBatch(db);
@@ -1276,6 +1351,7 @@
                             tx.set(doc(collection(db, 'transactions')), { ...payload, type: 'revenu', amount: total, description: `Vente : ${quantity} × ${product.name}`, saleId: saleRef.id });
                         }
                     });
+                    await logActivity('Vente enregistrée', `${quantity} × ${appData.products.find(p => p.id === productId)?.name || 'produit'} · ${paymentType === 'credit' ? 'à crédit' : 'payée'} · ${formatMoney(unitPrice * quantity)}`);
                 } else if (type === 'restock') {
                     const productId = formData.get('productId');
                     if (!productId || !Number.isSafeInteger(quantity) || quantity < 1) throw Error('Quantité incorrecte.');
@@ -1285,15 +1361,18 @@
                         if (!snap.exists()) throw Error('Produit introuvable.');
                         tx.update(ref, { stock: Number(snap.data().stock) + quantity });
                     });
+                    await logActivity('Stock réapprovisionné', `${quantity} unité(s) ajoutée(s) au produit ${appData.products.find(p => p.id === productId)?.name || productId}`);
                 } else if (type === 'transaction') {
                     payload.type = formData.get('t_type'); payload.amount = number('amount');
                     payload.description = String(formData.get('description')).trim();
                     if (!Number.isFinite(payload.amount) || payload.amount < 0 || !payload.description) throw Error('Transaction incorrecte.');
                     await addDoc(collection(db, 'transactions'), payload);
+                    await logActivity('Transaction ajoutée', `${payload.type === 'revenu' ? 'Revenu' : 'Dépense'} · ${payload.description} · ${formatMoney(payload.amount)}`);
                 } else if (type === 'product') {
                     payload.name = String(formData.get('name')).trim(); payload.sellPrice = number('sellPrice'); payload.stock = number('stock');
                     if (!payload.name || payload.sellPrice < 0 || !Number.isFinite(payload.sellPrice) || !Number.isSafeInteger(payload.stock) || payload.stock < 0) throw Error('Produit incorrect.');
                     await addDoc(collection(db, 'products'), payload);
+                    await logActivity('Produit ajouté', `${payload.name} · stock initial : ${payload.stock}`);
                 } else if (type === 'debt') {
                     payload.type = formData.get('d_type'); payload.person = String(formData.get('person')).trim();
                     payload.amount = number('amount'); payload.status = 'pending';
@@ -1303,10 +1382,12 @@
                     payload.quantity = formData.get('quantity') ? quantity : null;
                     if (!payload.person || !Number.isFinite(payload.amount) || payload.amount < 0 || (payload.quantity !== null && (!Number.isSafeInteger(quantity) || quantity < 1))) throw Error('Dette incorrecte.');
                     await addDoc(collection(db, 'debts'), payload);
+                    await logActivity('Dette ajoutée', `${payload.type === 'active' ? 'On nous doit' : 'Nous devons'} · ${payload.person} · ${formatMoney(payload.amount)}`);
                 } else {
                     payload.name = String(formData.get('name')).trim(); payload.category = formData.get('category'); payload.value = number('value');
                     if (!payload.name || !Number.isFinite(payload.value) || payload.value < 0) throw Error('Actif incorrect.');
                     await addDoc(collection(db, 'assets'), payload);
+                    await logActivity('Actif ajouté', `${payload.name} · ${formatMoney(payload.value)}`);
                 }
                 e.target.reset();
                 closeModal();
@@ -1316,11 +1397,15 @@
 
         window.navigate = (pageId, el) => {
             document.querySelectorAll('.app-page').forEach(p => p.classList.remove('active'));
-            document.getElementById(`page-${pageId}`).classList.add('active');
+            const target = document.getElementById(`page-${pageId}`);
+            if (!target) return;
+            target.classList.add('active');
             if (el) {
                 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
                 el.classList.add('active');
             }
+            if (pageId === 'profile') renderSharedActivity();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         };
     </script>
 </body>
