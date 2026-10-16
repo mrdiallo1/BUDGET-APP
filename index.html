@@ -7,7 +7,6 @@
     
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,7 +19,6 @@
             --bg-primary: #0A0A0A;
             --bg-secondary: #1A1A1A;
             --bg-card: #FFFFFF;
-            --bg-card-hover: #F8F8F8;
             --text-primary: #000000;
             --text-secondary: #666666;
             --text-muted: #999999;
@@ -36,20 +34,14 @@
             --radius-sm: 12px;
             --radius-md: 16px;
             --radius-lg: 24px;
-            
-            /* SAFE AREAS iOS */
-            --safe-area-top: env(safe-area-inset-top, 20px);
-            --safe-area-bottom: env(safe-area-inset-bottom, 20px);
-            --safe-area-left: env(safe-area-inset-left, 0px);
-            --safe-area-right: env(safe-area-inset-right, 0px);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         
         html, body {
-            /* Empêche le scroll horizontal et gère les safe areas */
             overflow-x: hidden;
             width: 100%;
+            height: 100%;
         }
         
         body { 
@@ -59,8 +51,7 @@
             margin: 0 auto; 
             min-height: 100vh;
             min-height: -webkit-fill-available;
-            padding-left: var(--safe-area-left);
-            padding-right: var(--safe-area-right);
+            position: relative;
         }
 
         /* ANIMATIONS */
@@ -92,9 +83,6 @@
             to { transform: rotate(360deg); }
         }
 
-        .animate-in { animation: fadeInUp 0.6s ease-out forwards; }
-        .animate-fade { animation: fadeIn 0.4s ease-out forwards; }
-
         /* ÉCRAN DE CONNEXION */
         .login-container {
             display: none;
@@ -103,7 +91,9 @@
             justify-content: center;
             min-height: 100vh;
             min-height: -webkit-fill-available;
-            padding: calc(20px + var(--safe-area-top)) 20px calc(20px + var(--safe-area-bottom));
+            padding: 20px;
+            padding-top: calc(20px + env(safe-area-inset-top));
+            padding-bottom: calc(20px + env(safe-area-inset-bottom));
             background: var(--gradient-dark);
             position: relative;
             overflow: hidden;
@@ -213,17 +203,14 @@
             box-shadow: var(--shadow-lg);
         }
 
-        .login-btn:active { transform: translateY(0); }
-
         /* APPLICATION PRINCIPALE */
         #app-view { display: none; }
 
-        /* HEADER AVEC SAFE AREA */
+        /* HEADER */
         .app-header { 
             background: var(--gradient-dark);
-            padding: calc(16px + var(--safe-area-top)) 20px 16px;
-            padding-left: calc(20px + var(--safe-area-left));
-            padding-right: calc(20px + var(--safe-area-right));
+            padding: 16px 20px;
+            padding-top: calc(16px + env(safe-area-inset-top));
             position: sticky;
             top: 0;
             z-index: 50;
@@ -231,7 +218,6 @@
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid rgba(255,255,255,0.1);
-            min-height: calc(60px + var(--safe-area-top));
         }
 
         .logo-container { display: flex; align-items: center; gap: 12px; }
@@ -292,7 +278,7 @@
         .app-page { 
             display: none; 
             padding: 20px; 
-            padding-bottom: calc(100px + var(--safe-area-bottom));
+            padding-bottom: 120px;
             animation: fadeIn 0.4s ease-out;
         }
         .app-page.active { display: block; }
@@ -403,7 +389,6 @@
 
         .stat-card.success .value { color: var(--success); }
         .stat-card.danger .value { color: var(--danger); }
-        .stat-card.warning .value { color: var(--warning); }
 
         /* ALERTS */
         .alert {
@@ -438,9 +423,6 @@
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
 
         .chart-wrapper {
@@ -510,15 +492,6 @@
         .item-info { min-width: 0; flex: 1; }
         .item-info h4 { font-size: 15px; font-weight: 600; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .item-info p { font-size: 12px; color: var(--text-muted); }
-        .item-info .actor { 
-            font-size: 10px; 
-            color: var(--text-muted); 
-            font-style: italic; 
-            margin-top: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
 
         .item-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; margin-left: 8px; }
         .item-right .amount { font-weight: 700; font-size: 15px; }
@@ -537,11 +510,11 @@
         .action-btn.success { color: var(--success); }
         .action-btn.danger { color: var(--danger); }
 
-        /* FAB AVEC SAFE AREA */
+        /* FAB */
         .fab { 
             position: fixed;
-            bottom: calc(100px + var(--safe-area-bottom));
-            right: calc(20px + var(--safe-area-right));
+            bottom: 100px;
+            right: 20px;
             width: 60px;
             height: 60px;
             background: var(--gradient-dark);
@@ -583,7 +556,7 @@
             background: white;
             width: 100%;
             padding: 24px;
-            padding-bottom: calc(24px + var(--safe-area-bottom));
+            padding-bottom: calc(24px + env(safe-area-inset-bottom));
             border-radius: var(--radius-lg) var(--radius-lg) 0 0;
             animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
             max-height: 90vh;
@@ -655,20 +628,20 @@
             margin-top: 8px;
         }
 
-        /* BOTTOM NAV AVEC SAFE AREA */
+        /* BOTTOM NAV - CORRIGÉE ET CENTRÉE */
         .bottom-nav { 
             position: fixed;
             bottom: 0;
-            left: 0;
-            right: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
             max-width: 500px;
-            margin: 0 auto;
             background: var(--gradient-dark);
             display: flex;
             justify-content: space-around;
-            padding: 12px 0 calc(24px + var(--safe-area-bottom));
-            padding-left: var(--safe-area-left);
-            padding-right: var(--safe-area-right);
+            align-items: center;
+            padding: 14px 0;
+            padding-bottom: calc(14px + env(safe-area-inset-bottom));
             box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
             z-index: 90;
             border-top: 1px solid rgba(255,255,255,0.1);
@@ -696,23 +669,6 @@
         }
 
         .nav-item.active i { transform: translateY(-2px); }
-
-        /* LOADING */
-        .loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 40px;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(0,0,0,0.1);
-            border-top-color: black;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
 
         /* EMPTY STATE */
         .empty-state {
@@ -802,9 +758,7 @@
             <div id="low-stock-alert"></div>
 
             <div class="chart-container">
-                <div class="chart-title">
-                    <span>Revenus vs Dépenses</span>
-                </div>
+                <div class="chart-title">Revenus vs Dépenses</div>
                 <div class="chart-wrapper">
                     <canvas id="revenueChart"></canvas>
                 </div>
@@ -914,7 +868,6 @@
         let appData = { transactions: [], products: [], debts: [], assets: [] };
         let revenueChart = null;
 
-        // AUTHENTIFICATION
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUserId = user.uid;
@@ -946,7 +899,6 @@
 
         window.logout = () => signOut(auth);
 
-        // INITIALISATION APP
         function initApp() {
             onSnapshot(collection(db, "transactions"), (snap) => {
                 appData.transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -986,7 +938,6 @@
             document.getElementById('debt-active').textContent = formatMoney(debtActive);
             document.getElementById('debt-passive').textContent = formatMoney(debtPassive);
 
-            // Alertes stock faible
             const lowStockProducts = appData.products.filter(p => p.stock <= 5);
             const alertContainer = document.getElementById('low-stock-alert');
             if (lowStockProducts.length > 0) {
@@ -1009,7 +960,6 @@
 
         function renderChart(revenue, expense) {
             const ctx = document.getElementById('revenueChart').getContext('2d');
-            
             if (revenueChart) revenueChart.destroy();
 
             revenueChart = new Chart(ctx, {
@@ -1037,7 +987,6 @@
         }
 
         function renderLists() {
-            // Activités récentes
             const recent = [...appData.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
             document.getElementById('activity-count').textContent = appData.transactions.length;
             
@@ -1062,7 +1011,6 @@
                     </div>
                 `).join('');
 
-            // Produits
             document.getElementById('product-count').textContent = appData.products.length;
             document.getElementById('products-list').innerHTML = appData.products.length === 0
                 ? '<div class="empty-state"><i class="fa-solid fa-box-open"></i><p>Aucun produit</p></div>'
@@ -1085,7 +1033,6 @@
                     </div>
                 `).join('');
 
-            // Dettes
             document.getElementById('debt-count').textContent = appData.debts.length;
             document.getElementById('debts-list').innerHTML = appData.debts.length === 0
                 ? '<div class="empty-state"><i class="fa-solid fa-hand-holding-dollar"></i><p>Aucune dette</p></div>'
@@ -1114,7 +1061,6 @@
                     </div>
                 `).join('');
 
-            // Actifs
             document.getElementById('asset-count').textContent = appData.assets.length;
             document.getElementById('assets-list').innerHTML = appData.assets.length === 0
                 ? '<div class="empty-state"><i class="fa-solid fa-building"></i><p>Aucun actif</p></div>'
@@ -1138,7 +1084,6 @@
                 `).join('');
         }
 
-        // ACTIONS
         window.deleteItem = async (col, id) => {
             if (confirm('Supprimer définitivement ?')) {
                 await deleteDoc(doc(db, col, id));
@@ -1161,7 +1106,6 @@
             }
         };
 
-        // MODAL & FORMULAIRES
         window.openModal = () => {
             document.getElementById('add-modal').classList.add('active');
             updateFormFields();
@@ -1177,74 +1121,27 @@
             
             if (type === 'transaction') {
                 container.innerHTML = `
-                    <div class="form-group">
-                        <label>Type</label>
-                        <select name="t_type">
-                            <option value="revenu">Revenu</option>
-                            <option value="depense">Dépense</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Montant (CFA)</label>
-                        <input type="number" name="amount" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Description</label>
-                        <input type="text" name="description" required>
-                    </div>
+                    <div class="form-group"><label>Type</label><select name="t_type"><option value="revenu">Revenu</option><option value="depense">Dépense</option></select></div>
+                    <div class="form-group"><label>Montant (CFA)</label><input type="number" name="amount" required></div>
+                    <div class="form-group"><label>Description</label><input type="text" name="description" required></div>
                 `;
             } else if (type === 'product') {
                 container.innerHTML = `
-                    <div class="form-group">
-                        <label>Nom du produit</label>
-                        <input type="text" name="name" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Prix de vente (CFA)</label>
-                        <input type="number" name="sellPrice" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Stock initial</label>
-                        <input type="number" name="stock" required>
-                    </div>
+                    <div class="form-group"><label>Nom du produit</label><input type="text" name="name" required></div>
+                    <div class="form-group"><label>Prix de vente (CFA)</label><input type="number" name="sellPrice" required></div>
+                    <div class="form-group"><label>Stock initial</label><input type="number" name="stock" required></div>
                 `;
             } else if (type === 'debt') {
                 container.innerHTML = `
-                    <div class="form-group">
-                        <label>Type</label>
-                        <select name="d_type">
-                            <option value="active">On nous doit</option>
-                            <option value="passive">Nous devons</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Personne</label>
-                        <input type="text" name="person" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Montant (CFA)</label>
-                        <input type="number" name="amount" required>
-                    </div>
+                    <div class="form-group"><label>Type</label><select name="d_type"><option value="active">On nous doit</option><option value="passive">Nous devons</option></select></div>
+                    <div class="form-group"><label>Personne</label><input type="text" name="person" required></div>
+                    <div class="form-group"><label>Montant (CFA)</label><input type="number" name="amount" required></div>
                 `;
             } else {
                 container.innerHTML = `
-                    <div class="form-group">
-                        <label>Nom du bien</label>
-                        <input type="text" name="name" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Catégorie</label>
-                        <select name="category">
-                            <option>Véhicule</option>
-                            <option>Équipement</option>
-                            <option>Mobilier</option>
-                            <option>Autre</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Valeur (CFA)</label>
-                        <input type="number" name="value" required>
-                    </div>
+                    <div class="form-group"><label>Nom du bien</label><input type="text" name="name" required></div>
+                    <div class="form-group"><label>Catégorie</label><select name="category"><option>Véhicule</option><option>Équipement</option><option>Mobilier</option><option>Autre</option></select></div>
+                    <div class="form-group"><label>Valeur (CFA)</label><input type="number" name="value" required></div>
                 `;
             }
         };
