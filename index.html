@@ -808,6 +808,8 @@
                 <span class="badge" id="product-count">0</span>
             </div>
             <div id="products-list"></div>
+            <div class="section-title" style="margin-top:24px"><span>Historique des ventes</span><span class="badge" id="sales-count">0</span></div>
+            <div id="sales-list"></div>
         </div>
 
         <!-- PAGE DETTES -->
@@ -832,6 +834,9 @@
             <div id="assets-list"></div>
         </div>
 
+        <div style="padding:0 20px 115px;text-align:center">
+            <button type="button" onclick="openResetModal()" style="border:1px solid #ef4444;background:transparent;color:#ef4444;border-radius:12px;padding:12px;font-weight:700;width:100%">Réinitialiser toutes les données</button>
+        </div>
         <button class="fab" onclick="openModal()"><i class="fa-solid fa-plus"></i></button>
 
         <!-- MODAL -->
@@ -844,6 +849,8 @@
                         <select id="add-type" onchange="updateFormFields()">
                             <option value="transaction">Transaction (Revenu/Dépense)</option>
                             <option value="product">Nouveau Produit</option>
+                            <option value="sale">Enregistrer une vente</option>
+                            <option value="restock">Réapprovisionner le stock</option>
                             <option value="debt">Nouvelle Dette</option>
                             <option value="asset">Nouvel Actif / Bien</option>
                         </select>
@@ -855,6 +862,19 @@
             </div>
         </div>
 
+        <div id="reset-modal" class="modal" role="dialog" aria-modal="true" aria-label="Réinitialisation">
+            <div class="modal-content">
+                <h3 style="color:#dc2626">Réinitialisation définitive</h3>
+                <p style="margin-bottom:15px;font-size:14px">Supprime les transactions, ventes, produits, dettes et actifs de toute l'entreprise. Cette action est irréversible. Exportez vos données avant de continuer.</p>
+                <form id="reset-form">
+                    <div class="form-group"><label>Mot de passe du compte connecté</label><input type="password" id="reset-password" autocomplete="current-password" required></div>
+                    <div class="form-group"><label>Tapez exactement SUPPRIMER TOUT</label><input type="text" id="reset-confirmation" autocomplete="off" required></div>
+                    <p id="reset-error" style="color:#dc2626;font-size:13px" role="alert"></p>
+                    <button class="btn-submit" id="reset-submit" type="submit" style="background:#dc2626">Supprimer définitivement</button>
+                </form>
+                <button class="btn-cancel" type="button" onclick="closeResetModal()">Annuler</button>
+            </div>
+        </div>
         <nav class="bottom-nav">
             <div class="nav-item active" onclick="navigate('home', this)">
                 <i class="fa-solid fa-house"></i>
@@ -877,8 +897,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, runTransaction, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAl4kdGud45pEoI84_A7iRM4ob0fqECkCU",
@@ -895,7 +915,7 @@
         const db = getFirestore(app);
 
         let currentUserId = null;
-        let appData = { transactions: [], products: [], debts: [], assets: [] };
+        let appData = { transactions: [], products: [], debts: [], assets: [], sales: [] };
         let revenueChart = null;
 
         onAuthStateChanged(auth, (user) => {
@@ -941,6 +961,10 @@
             onSnapshot(collection(db, "debts"), (snap) => {
                 appData.debts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 updateUI();
+            });
+            onSnapshot(collection(db, "sales"), (snap) => {
+                appData.sales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderLists();
             });
             onSnapshot(collection(db, "assets"), (snap) => {
                 appData.assets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1041,6 +1065,12 @@
                     </div>
                 `).join('');
 
+            document.getElementById('sales-count').textContent = appData.sales.length;
+            document.getElementById('sales-list').innerHTML = [...appData.sales].sort((a,b) => new Date(b.date)-new Date(a.date)).map(v => `
+                <div class="list-item"><div class="item-info"><h4>${escapeHtml(v.productName)}</h4>
+                <p>${v.quantity} × ${formatMoney(v.unitPrice)} · ${v.paymentType === 'credit' ? 'À crédit' : 'Payée'} · ${new Date(v.date).toLocaleDateString('fr-FR')}</p>
+                <p>${v.customer ? escapeHtml(v.customer) : ''}</p></div><strong>${formatMoney(v.total)}</strong></div>
+            `).join('') || '<div class="empty-state"><p>Aucune vente</p></div>';
             document.getElementById('product-count').textContent = appData.products.length;
             document.getElementById('products-list').innerHTML = appData.products.length === 0
                 ? '<div class="empty-state"><i class="fa-solid fa-box-open"></i><p>Aucun produit</p></div>'
@@ -1052,7 +1082,7 @@
                             </div>
                             <div class="item-info">
                                 <h4>${p.name}</h4>
-                                <p>Stock: ${p.stock} | Vente: ${formatMoney(p.sellPrice)}</p>
+                                <p>Stock: ${p.stock} | Prix indicatif: ${formatMoney(p.sellPrice)}</p>
                             </div>
                         </div>
                         <div class="item-right">
@@ -1075,6 +1105,7 @@
                             <div class="item-info">
                                 <h4>${d.person}</h4>
                                 <p>${d.type === 'active' ? 'On nous doit' : 'Nous devons'} • ${formatMoney(d.amount)}</p>
+                                    ${d.productName ? `<p>Produit : ${escapeHtml(d.productName)}${d.quantity ? ` · ${d.quantity} unité(s)` : ''}</p>` : ''}
                                 <p style="font-size: 10px; color: var(--text-muted);">${d.status === 'paid' ? '✓ Réglée' : 'En attente'}</p>
                             </div>
                         </div>
@@ -1114,6 +1145,10 @@
                 `).join('');
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+        const productOptions = () => appData.products.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (stock : ${Number(p.stock)||0})</option>`).join('');
         window.deleteItem = async (col, id) => {
             if (confirm('Supprimer définitivement ?')) {
                 await deleteDoc(doc(db, col, id));
@@ -1121,20 +1156,50 @@
         };
 
         window.markDebtPaid = async (id) => {
-            const debt = appData.debts.find(d => d.id === id);
-            if (debt) {
-                await updateDoc(doc(db, "debts", id), { status: 'paid' });
-                if (debt.type === 'active') {
-                    await addDoc(collection(db, "transactions"), {
-                        type: 'revenu',
-                        amount: debt.amount,
-                        description: `Règlement dette: ${debt.person}`,
-                        createdBy: currentUserId,
-                        date: new Date().toISOString()
-                    });
-                }
-            }
+            const ref = doc(db, "debts", id);
+            try {
+                await runTransaction(db, async tx => {
+                    const snap = await tx.get(ref);
+                    if (!snap.exists() || snap.data().status !== 'pending') throw Error('Dette déjà réglée ou introuvable.');
+                    const debt = snap.data();
+                    tx.update(ref, { status: 'paid', paidAt: new Date().toISOString() });
+                    const entry = doc(collection(db, 'transactions'));
+                    tx.set(entry, { type: debt.type === 'active' ? 'revenu' : 'depense',
+                        amount: debt.amount, description: `Règlement dette: ${debt.person}`,
+                        debtId: id, createdBy: currentUserId, date: new Date().toISOString() });
+                });
+            } catch(e) { alert(e.message); }
         };
+
+        window.openResetModal = () => { document.getElementById('reset-modal').classList.add('active'); };
+        window.closeResetModal = () => { document.getElementById('reset-modal').classList.remove('active'); document.getElementById('reset-form').reset(); document.getElementById('reset-error').textContent = ''; };
+        document.getElementById('reset-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const error = document.getElementById('reset-error');
+            const button = document.getElementById('reset-submit');
+            error.textContent = '';
+            if (document.getElementById('reset-confirmation').value !== 'SUPPRIMER TOUT') { error.textContent = 'Phrase de confirmation incorrecte.'; return; }
+            if (!auth.currentUser?.email) { error.textContent = 'Compte email requis.'; return; }
+            if (!confirm('Dernière confirmation : effacer définitivement toutes les données de l’entreprise ?')) return;
+            button.disabled = true;
+            try {
+                const credential = EmailAuthProvider.credential(auth.currentUser.email, document.getElementById('reset-password').value);
+                await reauthenticateWithCredential(auth.currentUser, credential);
+                // Les règles Firestore doivent limiter la suppression à un administrateur autorisé.
+                for (const name of ['sales', 'transactions', 'products', 'debts', 'assets']) {
+                    let snap = await getDocs(collection(db, name));
+                    while (!snap.empty) {
+                        const batch = writeBatch(db);
+                        snap.docs.slice(0, 400).forEach(item => batch.delete(item.ref));
+                        await batch.commit();
+                        snap = await getDocs(collection(db, name));
+                    }
+                }
+                closeResetModal();
+                alert('Toutes les données ont été réinitialisées.');
+            } catch(err) { error.textContent = 'Réinitialisation interrompue : ' + err.message; }
+            finally { button.disabled = false; }
+        });
 
         window.openModal = () => {
             document.getElementById('add-modal').classList.add('active');
@@ -1148,64 +1213,105 @@
         window.updateFormFields = () => {
             const type = document.getElementById('add-type').value;
             const container = document.getElementById('dynamic-fields');
-            
-            if (type === 'transaction') {
-                container.innerHTML = `
-                    <div class="form-group"><label>Type</label><select name="t_type"><option value="revenu">Revenu</option><option value="depense">Dépense</option></select></div>
-                    <div class="form-group"><label>Montant (CFA)</label><input type="number" name="amount" required></div>
-                    <div class="form-group"><label>Description</label><input type="text" name="description" required></div>
-                `;
-            } else if (type === 'product') {
-                container.innerHTML = `
-                    <div class="form-group"><label>Nom du produit</label><input type="text" name="name" required></div>
-                    <div class="form-group"><label>Prix de vente (CFA)</label><input type="number" name="sellPrice" required></div>
-                    <div class="form-group"><label>Stock initial</label><input type="number" name="stock" required></div>
-                `;
-            } else if (type === 'debt') {
-                container.innerHTML = `
-                    <div class="form-group"><label>Type</label><select name="d_type"><option value="active">On nous doit</option><option value="passive">Nous devons</option></select></div>
-                    <div class="form-group"><label>Personne</label><input type="text" name="person" required></div>
-                    <div class="form-group"><label>Montant (CFA)</label><input type="number" name="amount" required></div>
-                `;
-            } else {
-                container.innerHTML = `
-                    <div class="form-group"><label>Nom du bien</label><input type="text" name="name" required></div>
-                    <div class="form-group"><label>Catégorie</label><select name="category"><option>Véhicule</option><option>Équipement</option><option>Mobilier</option><option>Autre</option></select></div>
-                    <div class="form-group"><label>Valeur (CFA)</label><input type="number" name="value" required></div>
-                `;
-            }
+            if (type === 'transaction') container.innerHTML = `
+                <div class="form-group"><label>Type</label><select name="t_type"><option value="revenu">Revenu</option><option value="depense">Dépense</option></select></div>
+                <div class="form-group"><label>Montant (CFA)</label><input type="number" min="0" step="0.01" name="amount" required></div>
+                <div class="form-group"><label>Description</label><input type="text" name="description" required></div>`;
+            else if (type === 'product') container.innerHTML = `
+                <div class="form-group"><label>Nom du produit</label><input type="text" name="name" required></div>
+                <div class="form-group"><label>Prix de vente indicatif (CFA)</label><input type="number" min="0" step="0.01" name="sellPrice" required></div>
+                <div class="form-group"><label>Stock initial</label><input type="number" min="0" step="1" name="stock" required></div>`;
+            else if (type === 'sale') container.innerHTML = `
+                <div class="form-group"><label>Produit vendu</label><select name="productId" id="sale-product" required><option value="">Choisir</option>${productOptions()}</select></div>
+                <div class="form-group"><label>Quantité vendue</label><input type="number" min="1" step="1" name="quantity" required></div>
+                <div class="form-group"><label>Prix unitaire réel de la vente (CFA)</label><input type="number" min="0" step="0.01" name="unitPrice" required></div>
+                <div class="form-group"><label>Mode de paiement</label><select name="paymentType" id="sale-payment" onchange="document.getElementById('sale-customer').required=this.value==='credit'"><option value="cash">Payée immédiatement</option><option value="credit">Vente à crédit (créer une dette client)</option></select></div>
+                <div class="form-group"><label>Client (obligatoire à crédit)</label><input id="sale-customer" type="text" name="customer"></div>`;
+            else if (type === 'restock') container.innerHTML = `
+                <div class="form-group"><label>Produit</label><select name="productId" required><option value="">Choisir</option>${productOptions()}</select></div>
+                <div class="form-group"><label>Quantité à ajouter</label><input type="number" min="1" step="1" name="quantity" required></div>`;
+            else if (type === 'debt') container.innerHTML = `
+                <div class="form-group"><label>Type</label><select name="d_type"><option value="active">On nous doit</option><option value="passive">Nous devons</option></select></div>
+                <div class="form-group"><label>Personne</label><input type="text" name="person" required></div>
+                <div class="form-group"><label>Produit associé (facultatif, ne modifie pas le stock)</label><select name="productId"><option value="">Aucun</option>${productOptions()}</select></div>
+                <div class="form-group"><label>Quantité concernée (facultatif)</label><input type="number" min="1" step="1" name="quantity"></div>
+                <div class="form-group"><label>Montant total de la dette (CFA)</label><input type="number" min="0" step="0.01" name="amount" required></div>`;
+            else container.innerHTML = `
+                <div class="form-group"><label>Nom du bien</label><input type="text" name="name" required></div>
+                <div class="form-group"><label>Catégorie</label><select name="category"><option>Véhicule</option><option>Équipement</option><option>Mobilier</option><option>Autre</option></select></div>
+                <div class="form-group"><label>Valeur (CFA)</label><input type="number" min="0" step="0.01" name="value" required></div>`;
         };
 
         window.handleFormSubmit = async (e) => {
             e.preventDefault();
+            const button = e.target.querySelector('[type=submit]');
+            button.disabled = true;
             const formData = new FormData(e.target);
             const type = document.getElementById('add-type').value;
             const payload = { createdBy: currentUserId, date: new Date().toISOString() };
-
-            if (type === 'transaction') {
-                payload.type = formData.get('t_type');
-                payload.amount = parseFloat(formData.get('amount'));
-                payload.description = formData.get('description');
-                await addDoc(collection(db, "transactions"), payload);
-            } else if (type === 'product') {
-                payload.name = formData.get('name');
-                payload.sellPrice = parseFloat(formData.get('sellPrice'));
-                payload.stock = parseInt(formData.get('stock'));
-                await addDoc(collection(db, "products"), payload);
-            } else if (type === 'debt') {
-                payload.type = formData.get('d_type');
-                payload.person = formData.get('person');
-                payload.amount = parseFloat(formData.get('amount'));
-                payload.status = 'pending';
-                await addDoc(collection(db, "debts"), payload);
-            } else if (type === 'asset') {
-                payload.name = formData.get('name');
-                payload.category = formData.get('category');
-                payload.value = parseFloat(formData.get('value'));
-                await addDoc(collection(db, "assets"), payload);
-            }
-
-            closeModal();
+            const number = key => Number(formData.get(key));
+            const quantity = number('quantity');
+            try {
+                if (type === 'sale') {
+                    const productId = formData.get('productId');
+                    const unitPrice = number('unitPrice');
+                    const customer = String(formData.get('customer') || '').trim();
+                    const paymentType = formData.get('paymentType');
+                    if (!productId || !Number.isSafeInteger(quantity) || quantity < 1 || !Number.isFinite(unitPrice) || unitPrice < 0) throw Error('Vérifiez les informations de vente.');
+                    if (paymentType === 'credit' && !customer) throw Error('Indiquez le nom du client.');
+                    const productRef = doc(db, 'products', productId);
+                    await runTransaction(db, async tx => {
+                        const snap = await tx.get(productRef);
+                        if (!snap.exists()) throw Error('Produit introuvable.');
+                        const product = snap.data();
+                        const stock = Number(product.stock);
+                        if (!Number.isSafeInteger(stock) || stock < quantity) throw Error(`Stock insuffisant : ${stock} disponible(s).`);
+                        const total = Math.round(unitPrice * quantity * 100) / 100;
+                        const saleRef = doc(collection(db, 'sales'));
+                        tx.update(productRef, { stock: stock - quantity });
+                        tx.set(saleRef, { ...payload, productId, productName: product.name, quantity, unitPrice, total, paymentType, customer });
+                        if (paymentType === 'credit') {
+                            tx.set(doc(collection(db, 'debts')), { ...payload, type: 'active', person: customer, amount: total, status: 'pending', productId, productName: product.name, quantity, saleId: saleRef.id });
+                        } else {
+                            tx.set(doc(collection(db, 'transactions')), { ...payload, type: 'revenu', amount: total, description: `Vente : ${quantity} × ${product.name}`, saleId: saleRef.id });
+                        }
+                    });
+                } else if (type === 'restock') {
+                    const productId = formData.get('productId');
+                    if (!productId || !Number.isSafeInteger(quantity) || quantity < 1) throw Error('Quantité incorrecte.');
+                    const ref = doc(db, 'products', productId);
+                    await runTransaction(db, async tx => {
+                        const snap = await tx.get(ref);
+                        if (!snap.exists()) throw Error('Produit introuvable.');
+                        tx.update(ref, { stock: Number(snap.data().stock) + quantity });
+                    });
+                } else if (type === 'transaction') {
+                    payload.type = formData.get('t_type'); payload.amount = number('amount');
+                    payload.description = String(formData.get('description')).trim();
+                    if (!Number.isFinite(payload.amount) || payload.amount < 0 || !payload.description) throw Error('Transaction incorrecte.');
+                    await addDoc(collection(db, 'transactions'), payload);
+                } else if (type === 'product') {
+                    payload.name = String(formData.get('name')).trim(); payload.sellPrice = number('sellPrice'); payload.stock = number('stock');
+                    if (!payload.name || payload.sellPrice < 0 || !Number.isFinite(payload.sellPrice) || !Number.isSafeInteger(payload.stock) || payload.stock < 0) throw Error('Produit incorrect.');
+                    await addDoc(collection(db, 'products'), payload);
+                } else if (type === 'debt') {
+                    payload.type = formData.get('d_type'); payload.person = String(formData.get('person')).trim();
+                    payload.amount = number('amount'); payload.status = 'pending';
+                    payload.productId = formData.get('productId') || null;
+                    const product = appData.products.find(p => p.id === payload.productId);
+                    payload.productName = product?.name || null;
+                    payload.quantity = formData.get('quantity') ? quantity : null;
+                    if (!payload.person || !Number.isFinite(payload.amount) || payload.amount < 0 || (payload.quantity !== null && (!Number.isSafeInteger(quantity) || quantity < 1))) throw Error('Dette incorrecte.');
+                    await addDoc(collection(db, 'debts'), payload);
+                } else {
+                    payload.name = String(formData.get('name')).trim(); payload.category = formData.get('category'); payload.value = number('value');
+                    if (!payload.name || !Number.isFinite(payload.value) || payload.value < 0) throw Error('Actif incorrect.');
+                    await addDoc(collection(db, 'assets'), payload);
+                }
+                e.target.reset();
+                closeModal();
+            } catch(err) { alert('Enregistrement impossible : ' + err.message); }
+            finally { button.disabled = false; }
         };
 
         window.navigate = (pageId, el) => {
