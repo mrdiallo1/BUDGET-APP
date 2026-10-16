@@ -79,9 +79,6 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
 
         /* ÉCRAN DE CONNEXION */
         .login-container {
@@ -278,7 +275,7 @@
         .app-page { 
             display: none; 
             padding: 20px; 
-            padding-bottom: 120px;
+            padding-bottom: 100px;
             animation: fadeIn 0.4s ease-out;
         }
         .app-page.active { display: block; }
@@ -510,10 +507,10 @@
         .action-btn.success { color: var(--success); }
         .action-btn.danger { color: var(--danger); }
 
-        /* FAB */
+        /* FAB - JUSTE AU-DESSUS DE LA NAV */
         .fab { 
             position: fixed;
-            bottom: 100px;
+            bottom: calc(70px + env(safe-area-inset-bottom, 0px));
             right: 20px;
             width: 60px;
             height: 60px;
@@ -556,7 +553,7 @@
             background: white;
             width: 100%;
             padding: 24px;
-            padding-bottom: calc(24px + env(safe-area-inset-bottom));
+            padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
             border-radius: var(--radius-lg) var(--radius-lg) 0 0;
             animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
             max-height: 90vh;
@@ -628,24 +625,24 @@
             margin-top: 8px;
         }
 
-        /* BOTTOM NAV - CORRIGÉE ET CENTRÉE */
+        /* BOTTOM NAV - COLLÉE AU BAS DE L'ÉCRAN */
         .bottom-nav { 
-    position: fixed;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100%;
-    max-width: 500px;
-    background: var(--gradient-dark);
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    padding: 4px 0;
-    padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
-    z-index: 90;
-    border-top: 1px solid rgba(255,255,255,0.1);
-}
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 500px;
+            height: calc(60px + env(safe-area-inset-bottom, 0px));
+            background: var(--gradient-dark);
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start;
+            padding-top: 10px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+            z-index: 90;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
 
         .nav-item { 
             display: flex;
