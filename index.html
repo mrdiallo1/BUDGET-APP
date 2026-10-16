@@ -51,6 +51,7 @@
             margin: 0 auto; 
             min-height: 100vh;
             min-height: -webkit-fill-available;
+            min-height: 100dvh;
             position: relative;
         }
 
@@ -656,13 +657,23 @@
             background: var(--gradient-dark);
             display: flex;
             justify-content: space-around;
-            padding: 10px 8px calc(10px + env(safe-area-inset-bottom, 0px));
-            min-height: calc(68px + env(safe-area-inset-bottom, 0px));
+            padding: 10px 8px max(10px, env(safe-area-inset-bottom, 0px));
+            min-height: calc(68px + max(0px, env(safe-area-inset-bottom, 0px) - 10px));
+            margin: 0;
+            border-radius: 0;
+            box-sizing: border-box;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
             z-index: 90;
             border-top: 1px solid rgba(255,255,255,0.1);
         }
 
+
+        /* En mode PWA, le fond de la navigation couvre toute la zone basse,
+           tandis que les boutons restent hors de la zone des gestes système. */
+        @media (display-mode: standalone) {
+            html, body { min-height: 100dvh; }
+            .bottom-nav { bottom: 0; }
+        }
 
         .nav-item { 
             display: flex;
