@@ -717,6 +717,13 @@
             font-size: 14px;
         }
 
+        .admin-only.hidden-admin { display:none !important; }
+        .chart-note {font-size:12px;color:var(--text-muted);margin:-7px 0 14px;line-height:1.5}
+        .person-card {cursor:pointer}
+        .person-detail {display:none;padding:12px;margin:-4px 0 12px;background:#f8f8f8;border-radius:12px}
+        .person-detail.open {display:block}
+        .debt-line {padding:12px 4px;border-bottom:1px solid var(--border);font-size:13px}
+        .debt-line:last-child {border-bottom:0}
         /* RESPONSIVE */
         @media (max-width: 380px) {
             .hero-card h2 { font-size: 32px; }
@@ -787,12 +794,9 @@
 
             <div id="low-stock-alert"></div>
 
-            <div class="chart-container">
-                <div class="chart-title">Revenus vs Dépenses</div>
-                <div class="chart-wrapper">
-                    <canvas id="revenueChart"></canvas>
-                </div>
-            </div>
+            <div class="chart-container"><div class="chart-title">Dépenses par produit</div><p class="chart-note">Répartition des dépenses enregistrées et associées à un produit.</p><div class="chart-wrapper"><canvas id="expenseProductChart"></canvas></div></div>
+            <div class="chart-container"><div class="chart-title">Revenus par produit</div><p class="chart-note">Ventes encaissées et autres revenus associés aux produits (sans compter deux fois les ventes).</p><div class="chart-wrapper"><canvas id="revenueProductChart"></canvas></div></div>
+            <div class="chart-container"><div class="chart-title">Dettes actives et passives</div><p class="chart-note">Montants des dettes non réglées uniquement.</p><div class="chart-wrapper"><canvas id="debtChart"></canvas></div></div>
 
             <div class="section-title">
                 <span>Activités Récentes</span>
@@ -818,6 +822,7 @@
                 <span>Gestion des Dettes</span>
                 <span class="badge" id="debt-count">0</span>
             </div>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Cliquez sur une personne pour afficher toutes ses dettes et leurs détails.</p>
             <div id="debts-list"></div>
         </div>
 
@@ -842,7 +847,7 @@
                     <div class="item-icon default" style="width:52px;height:52px;font-size:22px"><i class="fa-solid fa-user"></i></div>
                     <div class="item-info">
                         <h4 id="profile-email">Compte connecté</h4>
-                        <p>Utilisateur CLYD Manager Pro</p>
+                        <p id="profile-role">Vérification des droits…</p>
                     </div>
                 </div>
             </div>
@@ -852,13 +857,13 @@
             </div>
             <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px">Historique des actions enregistrées par tous les utilisateurs de l’application.</p>
             <div id="shared-activity-list"></div>
-            <div style="margin:28px 0 24px;padding:16px;border:1px solid #fecaca;background:#fff7f7;border-radius:16px">
+            <div class="admin-only hidden-admin" style="margin:28px 0 24px;padding:16px;border:1px solid #fecaca;background:#fff7f7;border-radius:16px">
                 <h3 style="color:#dc2626;margin-bottom:8px;font-size:16px"><i class="fa-solid fa-triangle-exclamation"></i> Zone dangereuse</h3>
                 <p style="font-size:13px;color:#7f1d1d;line-height:1.5;margin-bottom:14px">La réinitialisation supprime les données communes de l’entreprise : ventes, transactions, produits, dettes, actifs et historique partagé. Les comptes de connexion ne sont pas supprimés. Cette action est irréversible.</p>
                 <button type="button" onclick="openResetModal()" style="border:1px solid #dc2626;background:#dc2626;color:white;border-radius:12px;padding:13px;font-weight:700;width:100%"><i class="fa-solid fa-trash-can"></i> Réinitialiser toutes les données</button>
             </div>
         </div>
-        <button class="fab" onclick="openModal()"><i class="fa-solid fa-plus"></i></button>
+        <button class="fab admin-only hidden-admin" onclick="openModal()"><i class="fa-solid fa-plus"></i></button>
 
         <!-- MODAL -->
         <div id="add-modal" class="modal">
@@ -923,7 +928,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, runTransaction, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, runTransaction, writeBatch, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAl4kdGud45pEoI84_A7iRM4ob0fqECkCU",
@@ -941,16 +946,34 @@
 
         let currentUserId = null;
         let appData = { transactions: [], products: [], debts: [], assets: [], sales: [], activity_logs: [] };
-        let revenueChart = null;
+        let charts = {};
+        let isAdmin = false;
+        let unsubscribeListeners = [];
+        const requireAdmin = () => { if (!auth.currentUser || !isAdmin) { alert('Accès réservé à l’administrateur.'); return false; } return true; };
+        function applyRole() {
+            document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden-admin', !isAdmin));
+            document.getElementById('profile-role').textContent = isAdmin ? 'Administrateur · modification autorisée' : 'Consultation uniquement · aucune modification autorisée';
+            document.getElementById('user-display').textContent = (auth.currentUser?.email || '').split('@')[0] + (isAdmin ? ' · Admin' : ' · Lecture');
+            renderLists();
+        }
 
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
+            unsubscribeListeners.forEach(fn => fn()); unsubscribeListeners = [];
+            isAdmin = false;
             if (user) {
                 currentUserId = user.uid;
                 document.getElementById('login-view').style.display = 'none';
                 document.getElementById('app-view').style.display = 'block';
                 document.getElementById('user-display').textContent = user.email.split('@')[0];
                 document.getElementById('profile-email').textContent = user.email || 'Compte connecté';
-                initApp();
+                applyRole();
+                try {
+                    const role = await getDoc(doc(db, 'admins', user.uid));
+                    if (auth.currentUser?.uid !== user.uid) return;
+                    isAdmin = role.exists() && role.data().enabled === true;
+                    applyRole();
+                    initApp();
+                } catch (err) { console.error('Lecture du rôle impossible', err); alert('Impossible de vérifier les droits du compte.'); }
             } else {
                 currentUserId = null;
                 document.getElementById('login-view').style.display = 'flex';
@@ -976,38 +999,38 @@
         window.logout = () => signOut(auth);
 
         function initApp() {
-            onSnapshot(collection(db, "transactions"), (snap) => {
+            unsubscribeListeners.push(onSnapshot(collection(db, "transactions"), (snap) => {
                 appData.transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 updateUI();
-            });
-            onSnapshot(collection(db, "products"), (snap) => {
+            }));
+            unsubscribeListeners.push(onSnapshot(collection(db, "products"), (snap) => {
                 appData.products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 updateUI();
-            });
-            onSnapshot(collection(db, "debts"), (snap) => {
+            }));
+            unsubscribeListeners.push(onSnapshot(collection(db, "debts"), (snap) => {
                 appData.debts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 updateUI();
-            });
-            onSnapshot(collection(db, "sales"), (snap) => {
+            }));
+            unsubscribeListeners.push(onSnapshot(collection(db, "sales"), (snap) => {
                 appData.sales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderLists();
-            });
-            onSnapshot(collection(db, "assets"), (snap) => {
+                updateUI();
+            }));
+            unsubscribeListeners.push(onSnapshot(collection(db, "assets"), (snap) => {
                 appData.assets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 updateUI();
-            });
-            onSnapshot(collection(db, "activity_logs"), (snap) => {
+            }));
+            unsubscribeListeners.push(onSnapshot(collection(db, "activity_logs"), (snap) => {
                 appData.activity_logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderSharedActivity();
             }, (error) => {
                 const container = document.getElementById('shared-activity-list');
                 if (container) container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-lock"></i><p>Impossible de charger l’historique. Vérifiez les règles Firestore de activity_logs.</p></div>';
                 console.error('Historique partagé inaccessible :', error);
-            });
+            }));
         }
 
         async function logActivity(action, details) {
-            if (!auth.currentUser) return;
+            if (!auth.currentUser || !isAdmin) return;
             try {
                 await addDoc(collection(db, 'activity_logs'), {
                     action: String(action || 'Action'),
@@ -1078,35 +1101,33 @@
             }
 
             renderLists();
-            renderChart(revenue, expense);
+            renderCharts(debtActive, debtPassive);
         }
 
-        function renderChart(revenue, expense) {
-            const ctx = document.getElementById('revenueChart').getContext('2d');
-            if (revenueChart) revenueChart.destroy();
-
-            revenueChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Revenus', 'Dépenses'],
-                    datasets: [{
-                        data: [revenue, expense],
-                        backgroundColor: ['#10B981', '#EF4444'],
-                        borderWidth: 0,
-                        cutout: '70%'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: { padding: 15, font: { size: 12 } }
-                        }
-                    }
+        function renderCharts(active, passive) {
+            const palette = ['#2563eb','#f97316','#10b981','#a855f7','#eab308','#ef4444','#06b6d4','#ec4899','#64748b','#84cc16','#14b8a6','#8b5cf6'];
+            const draw = (id, entries, colors) => {
+                if (charts[id]) charts[id].destroy();
+                const labels = entries.map(([label]) => label);
+                const values = entries.map(([,amount]) => amount);
+                charts[id] = new Chart(document.getElementById(id).getContext('2d'), {
+                    type:'doughnut', data:{labels: labels.length ? labels : ['Aucune donnée'],datasets:[{data:values.length ? values : [1],backgroundColor:values.length ? colors : ['#e5e7eb'],borderWidth:0,cutout:'62%'}]},
+                    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{padding:12,font:{size:11}}},tooltip:{callbacks:{label:ctx => values.length ? `${ctx.label} : ${formatMoney(ctx.raw)} (${(ctx.raw / values.reduce((a,b)=>a+b,0)*100).toFixed(1)} %)` : 'Aucune donnée'}}}}
+                });
+            };
+            const productName = id => appData.products.find(p => p.id === id)?.name;
+            const group = (type) => {
+                const totals = new Map();
+                for (const t of appData.transactions.filter(t => t.type === type)) {
+                    const amount = Number(t.amount) || 0; if (amount <= 0) continue;
+                    const label = t.productName || (t.productId ? productName(t.productId) : null) || 'Non attribué à un produit';
+                    totals.set(label, (totals.get(label)||0) + amount);
                 }
-            });
+                return [...totals.entries()].sort((a,b)=>b[1]-a[1]);
+            };
+            draw('expenseProductChart',group('depense'),palette);
+            draw('revenueProductChart',group('revenu'),palette);
+            draw('debtChart',[['Dettes actives',active],['Dettes passives',passive]].filter(([,v])=>v>0),['#10b981','#ef4444']);
         }
 
         function renderLists() {
@@ -1150,46 +1171,32 @@
                                 <i class="fa-solid fa-box"></i>
                             </div>
                             <div class="item-info">
-                                <h4>${p.name}</h4>
+                                <h4>${escapeHtml(p.name)}</h4>
                                 <p>Stock: ${p.stock} | Prix indicatif: ${formatMoney(p.sellPrice)}</p>
                             </div>
                         </div>
                         <div class="item-right">
-                            <button class="action-btn danger" onclick="deleteItem('products', '${p.id}')">
+                            ${isAdmin ? `<button class="action-btn danger" onclick="deleteItem('products', '${p.id}')">
                                 <i class="fa-solid fa-trash"></i>
-                            </button>
+                            </button>` : ''}
                         </div>
                     </div>
                 `).join('');
 
             document.getElementById('debt-count').textContent = appData.debts.length;
-            document.getElementById('debts-list').innerHTML = appData.debts.length === 0
-                ? '<div class="empty-state"><i class="fa-solid fa-hand-holding-dollar"></i><p>Aucune dette</p></div>'
-                : appData.debts.map((d, i) => `
-                    <div class="list-item" style="animation-delay: ${i * 0.05}s; ${d.status === 'paid' ? 'opacity: 0.5;' : ''}">
-                        <div class="item-left">
-                            <div class="item-icon ${d.type === 'active' ? 'success' : 'danger'}">
-                                <i class="fa-solid ${d.type === 'active' ? 'fa-hand-holding-dollar' : 'fa-file-invoice-dollar'}"></i>
-                            </div>
-                            <div class="item-info">
-                                <h4>${d.person}</h4>
-                                <p>${d.type === 'active' ? 'On nous doit' : 'Nous devons'} • ${formatMoney(d.amount)}</p>
-                                    ${d.productName ? `<p>Produit : ${escapeHtml(d.productName)}${d.quantity ? ` · ${d.quantity} unité(s)` : ''}</p>` : ''}
-                                <p style="font-size: 10px; color: var(--text-muted);">${d.status === 'paid' ? '✓ Réglée' : 'En attente'}</p>
-                            </div>
-                        </div>
-                        <div class="item-right">
-                            ${d.status === 'pending' ? `
-                                <button class="action-btn success" onclick="markDebtPaid('${d.id}')">
-                                    <i class="fa-solid fa-check"></i>
-                                </button>
-                            ` : ''}
-                            <button class="action-btn danger" onclick="deleteItem('debts', '${d.id}')">
-                                <i class="fa-solid fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `).join('');
+            const groups = new Map();
+            for (const debt of appData.debts) {
+                const key = String(debt.person || 'Sans nom').trim().toLocaleLowerCase('fr');
+                if (!groups.has(key)) groups.set(key, {name:debt.person || 'Sans nom', debts:[]});
+                groups.get(key).debts.push(debt);
+            }
+            document.getElementById('debts-list').innerHTML = groups.size ? [...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'fr')).map((g,i)=>{
+                const pending = g.debts.filter(d=>d.status==='pending');
+                const active = pending.filter(d=>d.type==='active').reduce((sum,d)=>sum+(Number(d.amount)||0),0);
+                const passive = pending.filter(d=>d.type==='passive').reduce((sum,d)=>sum+(Number(d.amount)||0),0);
+                return `<div class="list-item person-card" role="button" tabindex="0" onclick="togglePerson(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();togglePerson(${i})}"><div class="item-left"><div class="item-icon default"><i class="fa-solid fa-user"></i></div><div class="item-info"><h4>${escapeHtml(g.name)}</h4><p>${pending.length} non réglée(s) · ${g.debts.length} au total</p><p style="color:var(--success)">À recevoir : ${formatMoney(active)}</p><p style="color:var(--danger)">À payer : ${formatMoney(passive)}</p></div></div><i class="fa-solid fa-chevron-down"></i></div>
+                <div id="person-detail-${i}" class="person-detail">${g.debts.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).map(d=>`<div class="debt-line"><strong>${d.type==='active'?'On nous doit':'Nous devons'} · ${formatMoney(d.amount)}</strong><p>${d.status==='paid'?'✓ Réglée':'En attente'} · ${escapeHtml(d.date ? new Date(d.date).toLocaleDateString('fr-FR') : 'Date inconnue')}</p>${d.productName?`<p>Produit : ${escapeHtml(d.productName)}${d.quantity?` · ${Number(d.quantity)} unité(s)`:''}</p>`:''}${d.saleId?'<p>Origine : vente à crédit</p>':''}${d.paidAt?`<p>Réglée le ${escapeHtml(new Date(d.paidAt).toLocaleDateString('fr-FR'))}</p>`:''}<div style="display:flex;gap:12px;justify-content:flex-end">${isAdmin && d.status==='pending'?`<button class="action-btn success" title="Régler" onclick="markDebtPaid('${escapeHtml(d.id)}')"><i class="fa-solid fa-check"></i></button>`:''}${isAdmin?`<button class="action-btn danger" title="Supprimer" onclick="deleteItem('debts','${escapeHtml(d.id)}')"><i class="fa-solid fa-trash"></i></button>`:''}</div></div>`).join('')}</div>`;
+            }).join('') : '<div class="empty-state"><i class="fa-solid fa-hand-holding-dollar"></i><p>Aucune dette</p></div>';
 
             document.getElementById('asset-count').textContent = appData.assets.length;
             document.getElementById('assets-list').innerHTML = appData.assets.length === 0
@@ -1201,24 +1208,27 @@
                                 <i class="fa-solid fa-building"></i>
                             </div>
                             <div class="item-info">
-                                <h4>${a.name}</h4>
-                                <p>${a.category} • ${formatMoney(a.value)}</p>
+                                <h4>${escapeHtml(a.name)}</h4>
+                                <p>${escapeHtml(a.category)} • ${formatMoney(a.value)}</p>
                             </div>
                         </div>
                         <div class="item-right">
-                            <button class="action-btn danger" onclick="deleteItem('assets', '${a.id}')">
+                            ${isAdmin ? `<button class="action-btn danger" onclick="deleteItem('assets', '${a.id}')">
                                 <i class="fa-solid fa-trash"></i>
-                            </button>
+                            </button>` : ''}
                         </div>
                     </div>
                 `).join('');
         }
 
+        window.togglePerson = i => document.getElementById(`person-detail-${i}`)?.classList.toggle('open');
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         }
         const productOptions = () => appData.products.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (stock : ${Number(p.stock)||0})</option>`).join('');
         window.deleteItem = async (col, id) => {
+            if (!requireAdmin()) return;
+            if (!['transactions','products','debts','assets','sales'].includes(col)) return;
             if (confirm('Supprimer définitivement ?')) {
                 try {
                     const item = (appData[col] || []).find(entry => entry.id === id);
@@ -1230,6 +1240,7 @@
         };
 
         window.markDebtPaid = async (id) => {
+            if (!requireAdmin()) return;
             const ref = doc(db, "debts", id);
             try {
                 await runTransaction(db, async tx => {
@@ -1240,16 +1251,17 @@
                     const entry = doc(collection(db, 'transactions'));
                     tx.set(entry, { type: debt.type === 'active' ? 'revenu' : 'depense',
                         amount: debt.amount, description: `Règlement dette: ${debt.person}`,
-                        debtId: id, createdBy: currentUserId, date: new Date().toISOString() });
+                        debtId: id, productId: debt.productId || null, productName: debt.productName || null, createdBy: currentUserId, date: new Date().toISOString() });
                 });
                 await logActivity('Dette réglée', `Règlement de la dette de ${appData.debts.find(d => d.id === id)?.person || id}`);
             } catch(e) { alert(e.message); }
         };
 
-        window.openResetModal = () => { document.getElementById('reset-modal').classList.add('active'); };
+        window.openResetModal = () => { if (!requireAdmin()) return;  document.getElementById('reset-modal').classList.add('active'); };
         window.closeResetModal = () => { document.getElementById('reset-modal').classList.remove('active'); document.getElementById('reset-form').reset(); document.getElementById('reset-error').textContent = ''; };
         document.getElementById('reset-form').addEventListener('submit', async e => {
             e.preventDefault();
+            if (!requireAdmin()) return;
             const error = document.getElementById('reset-error');
             const button = document.getElementById('reset-submit');
             error.textContent = '';
@@ -1277,6 +1289,7 @@
         });
 
         window.openModal = () => {
+            if (!requireAdmin()) return;
             document.getElementById('add-modal').classList.add('active');
             updateFormFields();
         };
@@ -1291,11 +1304,13 @@
             if (type === 'transaction') container.innerHTML = `
                 <div class="form-group"><label>Type</label><select name="t_type"><option value="revenu">Revenu</option><option value="depense">Dépense</option></select></div>
                 <div class="form-group"><label>Montant (CFA)</label><input type="number" min="0" step="0.01" name="amount" required></div>
-                <div class="form-group"><label>Description</label><input type="text" name="description" required></div>`;
+                <div class="form-group"><label>Description</label><input type="text" name="description" required></div>
+                <div class="form-group"><label>Produit concerné (facultatif, pour les graphiques)</label><select name="productId"><option value="">Non attribué</option>${productOptions()}</select></div>`;
             else if (type === 'product') container.innerHTML = `
                 <div class="form-group"><label>Nom du produit</label><input type="text" name="name" required></div>
                 <div class="form-group"><label>Prix de vente indicatif (CFA)</label><input type="number" min="0" step="0.01" name="sellPrice" required></div>
-                <div class="form-group"><label>Stock initial</label><input type="number" min="0" step="1" name="stock" required></div>`;
+                <div class="form-group"><label>Stock initial</label><input type="number" min="0" step="1" name="stock" required></div>
+                <div class="form-group"><label>Coût total du stock initial (facultatif, enregistré comme dépense)</label><input type="number" min="0" step="0.01" name="initialCost" placeholder="0"></div>`;
             else if (type === 'sale') container.innerHTML = `
                 <div class="form-group"><label>Produit vendu</label><select name="productId" id="sale-product" required><option value="">Choisir</option>${productOptions()}</select></div>
                 <div class="form-group"><label>Quantité vendue</label><input type="number" min="1" step="1" name="quantity" required></div>
@@ -1304,10 +1319,12 @@
                 <div class="form-group"><label>Client (obligatoire à crédit)</label><input id="sale-customer" type="text" name="customer"></div>`;
             else if (type === 'restock') container.innerHTML = `
                 <div class="form-group"><label>Produit</label><select name="productId" required><option value="">Choisir</option>${productOptions()}</select></div>
-                <div class="form-group"><label>Quantité à ajouter</label><input type="number" min="1" step="1" name="quantity" required></div>`;
+                <div class="form-group"><label>Quantité à ajouter</label><input type="number" min="1" step="1" name="quantity" required></div>
+                <div class="form-group"><label>Coût total de ce réapprovisionnement (facultatif, enregistré comme dépense)</label><input type="number" min="0" step="0.01" name="restockCost" placeholder="0"></div>`;
             else if (type === 'debt') container.innerHTML = `
                 <div class="form-group"><label>Type</label><select name="d_type"><option value="active">On nous doit</option><option value="passive">Nous devons</option></select></div>
-                <div class="form-group"><label>Personne</label><input type="text" name="person" required></div>
+                <div class="form-group"><label>Personne déjà enregistrée (facultatif)</label><select name="existingPerson" onchange="document.getElementById('debt-person').value=this.value"><option value="">Nouvelle personne / saisir un nom</option>${[...new Set(appData.debts.filter(d=>d.status==='pending').map(d=>String(d.person||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr')).map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}</select></div>
+                <div class="form-group"><label>Personne</label><input id="debt-person" type="text" name="person" required></div>
                 <div class="form-group"><label>Produit associé (facultatif, ne modifie pas le stock)</label><select name="productId"><option value="">Aucun</option>${productOptions()}</select></div>
                 <div class="form-group"><label>Quantité concernée (facultatif)</label><input type="number" min="1" step="1" name="quantity"></div>
                 <div class="form-group"><label>Montant total de la dette (CFA)</label><input type="number" min="0" step="0.01" name="amount" required></div>`;
@@ -1319,6 +1336,7 @@
 
         window.handleFormSubmit = async (e) => {
             e.preventDefault();
+            if (!requireAdmin()) return;
             const button = e.target.querySelector('[type=submit]');
             button.disabled = true;
             const formData = new FormData(e.target);
@@ -1348,30 +1366,41 @@
                         if (paymentType === 'credit') {
                             tx.set(doc(collection(db, 'debts')), { ...payload, type: 'active', person: customer, amount: total, status: 'pending', productId, productName: product.name, quantity, saleId: saleRef.id });
                         } else {
-                            tx.set(doc(collection(db, 'transactions')), { ...payload, type: 'revenu', amount: total, description: `Vente : ${quantity} × ${product.name}`, saleId: saleRef.id });
+                            tx.set(doc(collection(db, 'transactions')), { ...payload, type: 'revenu', amount: total, description: `Vente : ${quantity} × ${product.name}`, productId, productName: product.name, saleId: saleRef.id });
                         }
                     });
                     await logActivity('Vente enregistrée', `${quantity} × ${appData.products.find(p => p.id === productId)?.name || 'produit'} · ${paymentType === 'credit' ? 'à crédit' : 'payée'} · ${formatMoney(unitPrice * quantity)}`);
                 } else if (type === 'restock') {
                     const productId = formData.get('productId');
                     if (!productId || !Number.isSafeInteger(quantity) || quantity < 1) throw Error('Quantité incorrecte.');
+                    const cost = formData.get('restockCost') ? number('restockCost') : 0;
+                    if (!Number.isFinite(cost) || cost < 0) throw Error('Coût incorrect.');
                     const ref = doc(db, 'products', productId);
                     await runTransaction(db, async tx => {
                         const snap = await tx.get(ref);
                         if (!snap.exists()) throw Error('Produit introuvable.');
                         tx.update(ref, { stock: Number(snap.data().stock) + quantity });
+                        if (cost > 0) tx.set(doc(collection(db,'transactions')), {...payload,type:'depense',amount:cost,description:`Réapprovisionnement : ${snap.data().name}`,productId,productName:snap.data().name});
                     });
                     await logActivity('Stock réapprovisionné', `${quantity} unité(s) ajoutée(s) au produit ${appData.products.find(p => p.id === productId)?.name || productId}`);
                 } else if (type === 'transaction') {
                     payload.type = formData.get('t_type'); payload.amount = number('amount');
                     payload.description = String(formData.get('description')).trim();
                     if (!Number.isFinite(payload.amount) || payload.amount < 0 || !payload.description) throw Error('Transaction incorrecte.');
+                    payload.productId = formData.get('productId') || null;
+                    payload.productName = appData.products.find(p=>p.id===payload.productId)?.name || null;
                     await addDoc(collection(db, 'transactions'), payload);
                     await logActivity('Transaction ajoutée', `${payload.type === 'revenu' ? 'Revenu' : 'Dépense'} · ${payload.description} · ${formatMoney(payload.amount)}`);
                 } else if (type === 'product') {
                     payload.name = String(formData.get('name')).trim(); payload.sellPrice = number('sellPrice'); payload.stock = number('stock');
                     if (!payload.name || payload.sellPrice < 0 || !Number.isFinite(payload.sellPrice) || !Number.isSafeInteger(payload.stock) || payload.stock < 0) throw Error('Produit incorrect.');
-                    await addDoc(collection(db, 'products'), payload);
+                    const initialCost = formData.get('initialCost') ? number('initialCost') : 0;
+                    if (!Number.isFinite(initialCost) || initialCost < 0) throw Error('Coût initial incorrect.');
+                    const productRef = doc(collection(db,'products'));
+                    const batch = writeBatch(db);
+                    batch.set(productRef,payload);
+                    if (initialCost > 0) batch.set(doc(collection(db,'transactions')),{createdBy:currentUserId,date:payload.date,type:'depense',amount:initialCost,description:`Stock initial : ${payload.name}`,productId:productRef.id,productName:payload.name});
+                    await batch.commit();
                     await logActivity('Produit ajouté', `${payload.name} · stock initial : ${payload.stock}`);
                 } else if (type === 'debt') {
                     payload.type = formData.get('d_type'); payload.person = String(formData.get('person')).trim();
